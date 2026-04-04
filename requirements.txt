@@ -1,0 +1,6 @@
+# Base install is dependency-light.
+# For tests: pip install -e .[dev]
+# For live sensors only: pip install -e .[live]
+# For caption + STT: pip install -e .[live-full]
+# For voice output: pip install -e .[voice]
+# For everything in one go: pip install -e .[live-full,voice,dev]
