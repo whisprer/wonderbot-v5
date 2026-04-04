@@ -1,6 +1,6 @@
-# wonderbot-v9
+# wonderbot-v10
 
-A clean consolidation base for the archived LLM/agent experiments, now extended through **phase 9 planning and execution**.
+A clean consolidation base for the archived LLM/agent experiments, now extended through **phase 10 planning, execution, and controlled tool/action runs**.
 
 This repo is deliberately **not** another fragile wrapper around a standard tokenizer pretending to be tokenizerless.
 Instead it separates the system into clear layers:
@@ -94,6 +94,21 @@ That split is the point: the old projects drifted because the “new tokenizer�
   - `/plan step depends <plan_id> <step_id> <dep_step_id>`
   - `/next [n]`
 
+
+
+## What phase 10 adds
+
+- **Action/tool registry** in `wonderbot/execution.py`.
+- **Execution log** in `state/action_runs.json`.
+- Controlled tool runs with **dry-run by default** and explicit commit mode.
+- **Plan-step execution** that can resolve step intents into safe internal actions.
+- New CLI commands:
+  - `/tools`
+  - `/runs [n]`
+  - `/act run <tool> [key=value ...] [--commit]`
+  - `/act step <plan_id> <step_id> [--commit]`
+  - `/act next [n] [--commit]`
+
 ## What this repo does now
 
 - Runs immediately with **no third-party dependencies**.
@@ -163,6 +178,11 @@ py -3.11 -m wonderbot.cli --live --camera --microphone --caption --stt --tts --d
 - `/plan show <id>` — inspect a plan and its steps
 - `/plan step add <plan_id> wire command handlers` — add a step
 - `/next 8` — inspect currently executable next steps
+- `/tools` — list built-in action tools and their intent mapping
+- `/runs 10` — inspect recent tool/action executions
+- `/act run diagnostics` — dry-run or run a specific built-in tool
+- `/act step <plan_id> <step_id> --commit` — execute a specific plan step
+- `/act next 3` — preview the next executable steps and their mapped tools
 - `/queue 10` — inspect the active work queue
 - `/diagnostics` — dump runtime diagnostics
 - `/voice on` / `/voice off` — enable or disable speaking for the current run

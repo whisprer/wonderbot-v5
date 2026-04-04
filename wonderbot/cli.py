@@ -6,6 +6,7 @@ import time
 
 from .agent import AgentTurn, WonderBot
 from .config import WonderBotConfig
+from .execution import parse_kv_args
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -95,7 +96,8 @@ def _handle_command(line: str, bot: WonderBot) -> bool:
     if command == "/help":
         print(
             "/tick [n]  /sense  /watch [n]  /sensors  /diagnostics  /focus  /voice on|off  "
-            "/state  /memory [n]  /stm [n]  /ltm [n]  /self [kind] [n]  /preferences  /goals [status] [n]  /goal ...  /plans [status] [n]  /plan ...  /next [n]  /queue [n]  "
+            "/state  /memory [n]  /stm [n]  /ltm [kind] [n]  /self [kind] [n]  /preferences  /goals [status] [n]  /goal ...  "
+            "/plans [status] [n]  /plan ...  /next [n]  /queue [n]  /tools  /runs [n]  /act ...  "
             "/search <query>  /remember <query>  /consolidate  /reflect  /sleep  /dream [n]  /journal [kind] [n]  /tasks  /beliefs  /threads  /save  /quit"
         )
         return True
@@ -151,27 +153,13 @@ def _handle_command(line: str, bot: WonderBot) -> bool:
     if command == "/state":
         print(json.dumps(bot.state_summary(), indent=2, ensure_ascii=False))
         return True
-    if command == "/memory":
-        limit = int(arg) if arg else 10
-        for item in bot.memory.top_memories(limit):
-            print(f"- ({item.priority:.3f}) [{item.source}] {item.text}")
-        return True
-    if command == "/stm":
+    if command in {"/memory", "/stm"}:
         limit = int(arg) if arg else 10
         for item in bot.memory.top_memories(limit):
             print(f"- ({item.priority:.3f}) [{item.source}] {item.text}")
         return True
     if command == "/ltm":
-        parts = arg.split()
-        kind = None
-        limit = 10
-        if parts:
-            if parts[0].isdigit():
-                limit = int(parts[0])
-            else:
-                kind = parts[0]
-                if len(parts) > 1 and parts[1].isdigit():
-                    limit = int(parts[1])
+        kind, limit = _kind_and_limit(arg, default_limit=10)
         entries = bot.longterm.latest(kind=kind, limit=limit)
         if not entries:
             print("[system] long-term memory is empty for that view.")
@@ -180,16 +168,7 @@ def _handle_command(line: str, bot: WonderBot) -> bool:
             print(f"- ({entry.strength:.2f}) [{entry.kind}] {entry.text}")
         return True
     if command == "/self":
-        parts = arg.split()
-        kind = None
-        limit = 10
-        if parts:
-            if parts[0].isdigit():
-                limit = int(parts[0])
-            else:
-                kind = parts[0]
-                if len(parts) > 1 and parts[1].isdigit():
-                    limit = int(parts[1])
+        kind, limit = _kind_and_limit(arg, default_limit=10)
         entries = bot.self_model.latest(kind=kind, limit=limit)
         if not entries:
             print("[system] self model is empty for that view.")
@@ -206,16 +185,7 @@ def _handle_command(line: str, bot: WonderBot) -> bool:
             print(f"- ({entry.strength:.2f}) {entry.text}")
         return True
     if command == "/goals":
-        parts = arg.split()
-        status = None
-        limit = 10
-        if parts:
-            if parts[0].isdigit():
-                limit = int(parts[0])
-            else:
-                status = parts[0]
-                if len(parts) > 1 and parts[1].isdigit():
-                    limit = int(parts[1])
+        status, limit = _kind_and_limit(arg, default_limit=10)
         entries = bot.goals.latest(status=status, limit=limit)
         if not entries:
             print("[system] no goals for that view.")
@@ -237,16 +207,7 @@ def _handle_command(line: str, bot: WonderBot) -> bool:
             print(f"{marker} {entry.id[:8]} [{entry.status}] ({entry.priority:.2f}/{entry.progress:.2f}) {entry.title}")
         return True
     if command == "/plans":
-        parts = arg.split()
-        status = None
-        limit = 10
-        if parts:
-            if parts[0].isdigit():
-                limit = int(parts[0])
-            else:
-                status = parts[0]
-                if len(parts) > 1 and parts[1].isdigit():
-                    limit = int(parts[1])
+        status, limit = _kind_and_limit(arg, default_limit=10)
         entries = bot.plans.latest(status=status, limit=limit)
         if not entries:
             print("[system] no plans for that view.")
@@ -267,175 +228,30 @@ def _handle_command(line: str, bot: WonderBot) -> bool:
             print(f"- {plan.id[:8]}/{step.id[:8]}{intent} {step.title} (plan: {plan.title})")
         return True
     if command == "/goal":
-        parts = arg.split(maxsplit=2)
-        if not parts:
-            print("Usage: /goal add <text> | /goal done <id> | /goal block <id> [note] | /goal focus <id> | /goal progress <id> <0..1>")
-            return True
-        action = parts[0].lower()
-        if action == "add":
-            if len(parts) < 2:
-                print("Usage: /goal add <text>")
-                return True
-            entry = bot.add_goal(parts[1] if len(parts) == 2 else parts[1] + " " + parts[2])
-            print(f"[system] added goal {entry.id[:8]}: {entry.title}")
-            return True
-        if action == "done":
-            if len(parts) < 2:
-                print("Usage: /goal done <id>")
-                return True
-            entry = bot.set_goal_status(parts[1], status="done", progress=1.0)
-            if entry is None:
-                print("[system] no matching goal.")
-            else:
-                print(f"[system] marked goal {entry.id[:8]} done.")
-            return True
-        if action == "block":
-            if len(parts) < 2:
-                print("Usage: /goal block <id> [note]")
-                return True
-            note = parts[2] if len(parts) > 2 else ""
-            entry = bot.set_goal_status(parts[1], status="blocked", note=note)
-            if entry is None:
-                print("[system] no matching goal.")
-            else:
-                print(f"[system] marked goal {entry.id[:8]} blocked.")
-            return True
-        if action == "focus":
-            if len(parts) < 2:
-                print("Usage: /goal focus <id>")
-                return True
-            entry = bot.focus_goal(parts[1])
-            if entry is None:
-                print("[system] no matching goal.")
-            else:
-                print(f"[system] focused goal {entry.id[:8]}: {entry.title}")
-            return True
-        if action == "progress":
-            if len(parts) < 3:
-                print("Usage: /goal progress <id> <0..1>")
-                return True
-            try:
-                progress = float(parts[2])
-            except ValueError:
-                print("[system] progress must be a number between 0 and 1.")
-                return True
-            entry = bot.set_goal_status(parts[1], status="active", progress=progress)
-            if entry is None:
-                print("[system] no matching goal.")
-            else:
-                print(f"[system] updated goal {entry.id[:8]} progress to {entry.progress:.2f}.")
-            return True
-        print("Usage: /goal add <text> | /goal done <id> | /goal block <id> [note] | /goal focus <id> | /goal progress <id> <0..1>")
-        return True
+        return _handle_goal_command(arg, bot)
     if command == "/plan":
-        parts = arg.split(maxsplit=4)
-        if not parts or not parts[0]:
-            print("Usage: /plan add <text> | /plan show <id> | /plan focus <id> | /plan done <id> | /plan block <id> [note] | /plan step add <plan_id> <text> | /plan step doing|done|block <plan_id> <step_id> [note] | /plan step depends <plan_id> <step_id> <dep_step_id>")
-            return True
-        action = parts[0].lower()
-        if action == "add":
-            if len(parts) < 2:
-                print("Usage: /plan add <text>")
-                return True
-            entry = bot.add_plan(" ".join(parts[1:]))
-            print(f"[system] added plan {entry.id[:8]}: {entry.title}")
-            return True
-        if action == "show":
-            if len(parts) < 2:
-                print("Usage: /plan show <id>")
-                return True
-            entry = bot.plans.get(parts[1])
-            if entry is None:
-                print("[system] no matching plan.")
-                return True
-            print(f"[{entry.id[:8]}] {entry.title} [{entry.status}] progress={entry.progress:.2f}" + (f" goal={entry.goal_id[:8]}" if entry.goal_id else ""))
-            if entry.detail:
-                print(f"  {entry.detail}")
-            if entry.action_intents:
-                print(f"  intents: {', '.join(entry.action_intents)}")
-            if entry.steps:
-                print("  [steps]")
-                for step in sorted(entry.steps, key=lambda item: item.order):
-                    deps = ""
-                    if step.dependency_ids:
-                        deps = " deps=" + ",".join(dep[:8] for dep in step.dependency_ids)
-                    blocker = f" blocker={step.blocker_note}" if step.blocker_note else ""
-                    intent = f" [{step.action_intent}]" if step.action_intent else ""
-                    print(f"  - {step.id[:8]} [{step.status}] ({step.progress:.2f}){intent} {step.title}{deps}{blocker}")
-            else:
-                print("  [steps] none yet")
-            return True
-        if action == "focus":
-            if len(parts) < 2:
-                print("Usage: /plan focus <id>")
-                return True
-            entry = bot.focus_plan(parts[1])
-            if entry is None:
-                print("[system] no matching plan.")
-            else:
-                print(f"[system] focused plan {entry.id[:8]}: {entry.title}")
-            return True
-        if action == "done":
-            if len(parts) < 2:
-                print("Usage: /plan done <id>")
-                return True
-            entry = bot.set_plan_status(parts[1], status="done")
-            if entry is None:
-                print("[system] no matching plan.")
-            else:
-                print(f"[system] marked plan {entry.id[:8]} done.")
-            return True
-        if action == "block":
-            if len(parts) < 2:
-                print("Usage: /plan block <id> [note]")
-                return True
-            note = " ".join(parts[2:]) if len(parts) > 2 else ""
-            entry = bot.set_plan_status(parts[1], status="blocked", note=note)
-            if entry is None:
-                print("[system] no matching plan.")
-            else:
-                print(f"[system] marked plan {entry.id[:8]} blocked.")
-            return True
-        if action == "step":
-            if len(parts) < 3:
-                print("Usage: /plan step add <plan_id> <text> | /plan step doing|done|block <plan_id> <step_id> [note] | /plan step depends <plan_id> <step_id> <dep_step_id>")
-                return True
-            subaction = parts[1].lower()
-            if subaction == "add":
-                if len(parts) < 4:
-                    print("Usage: /plan step add <plan_id> <text>")
-                    return True
-                plan, step = bot.add_plan_step(parts[2], " ".join(parts[3:]))
-                if plan is None or step is None:
-                    print("[system] no matching plan.")
-                else:
-                    print(f"[system] added step {step.id[:8]} to plan {plan.id[:8]}.")
-                return True
-            if subaction in {"doing", "done", "block"}:
-                if len(parts) < 4:
-                    print("Usage: /plan step doing|done|block <plan_id> <step_id> [note]")
-                    return True
-                note = parts[4] if len(parts) > 4 else ""
-                status = {"doing": "doing", "done": "done", "block": "blocked"}[subaction]
-                blocker_note = note if status == "blocked" else ""
-                plan, step = bot.set_plan_step_status(parts[2], parts[3], status=status, note=note, blocker_note=blocker_note)
-                if plan is None or step is None:
-                    print("[system] no matching plan/step.")
-                else:
-                    print(f"[system] updated {plan.id[:8]}/{step.id[:8]} to {step.status}.")
-                return True
-            if subaction == "depends":
-                if len(parts) < 5:
-                    print("Usage: /plan step depends <plan_id> <step_id> <dep_step_id>")
-                    return True
-                plan, step = bot.add_plan_dependency(parts[2], parts[3], parts[4])
-                if plan is None or step is None:
-                    print("[system] no matching plan/step.")
-                else:
-                    print(f"[system] added dependency to {plan.id[:8]}/{step.id[:8]}.")
-                return True
-        print("Usage: /plan add <text> | /plan show <id> | /plan focus <id> | /plan done <id> | /plan block <id> [note] | /plan step add <plan_id> <text> | /plan step doing|done|block <plan_id> <step_id> [note] | /plan step depends <plan_id> <step_id> <dep_step_id>")
+        return _handle_plan_command(arg, bot)
+    if command == "/tools":
+        for tool in bot.actions.list_tools():
+            mode = "read-only" if tool.read_only else "mutating"
+            aliases = f" aliases={','.join(tool.aliases)}" if tool.aliases else ""
+            intents = f" intents={','.join(tool.intents)}" if tool.intents else ""
+            print(f"- {tool.name} [{mode}] {tool.detail}{aliases}{intents}")
         return True
+    if command == "/runs":
+        limit = int(arg) if arg and arg.strip().isdigit() else 10
+        runs = bot.actions.latest_runs(limit=limit)
+        if not runs:
+            print("[system] no tool runs yet.")
+            return True
+        for run in runs:
+            mode = "dry" if run.dry_run else "commit"
+            outcome = "ok" if run.success else "fail"
+            target = f" {run.plan_id[:8]}/{run.step_id[:8]}" if run.plan_id and run.step_id else ""
+            print(f"- {run.id[:8]} [{mode}/{outcome}] {run.tool_name}{target}: {run.summary}")
+        return True
+    if command == "/act":
+        return _handle_act_command(arg, bot)
     if command == "/search":
         if not arg:
             print("Usage: /search your query")
@@ -473,16 +289,7 @@ def _handle_command(line: str, bot: WonderBot) -> bool:
             _render_sleep(report)
         return True
     if command == "/journal":
-        parts = arg.split()
-        kind = None
-        limit = 8
-        if parts:
-            if parts[0].isdigit():
-                limit = int(parts[0])
-            else:
-                kind = parts[0]
-                if len(parts) > 1 and parts[1].isdigit():
-                    limit = int(parts[1])
+        kind, limit = _kind_and_limit(arg, default_limit=8)
         entries = bot.journal.latest(kind=kind, limit=limit)
         if not entries:
             print("[system] journal is empty for that view.")
@@ -510,6 +317,254 @@ def _handle_command(line: str, bot: WonderBot) -> bool:
         return False
     print(f"Unknown command: {command}. Use /help.")
     return True
+
+
+def _handle_goal_command(arg: str, bot: WonderBot) -> bool:
+    parts = arg.split(maxsplit=2)
+    if not parts:
+        print("Usage: /goal add <text> | /goal done <id> | /goal block <id> [note] | /goal focus <id> | /goal progress <id> <0..1>")
+        return True
+    action = parts[0].lower()
+    if action == "add":
+        if len(parts) < 2:
+            print("Usage: /goal add <text>")
+            return True
+        entry = bot.add_goal(parts[1] if len(parts) == 2 else parts[1] + " " + parts[2])
+        print(f"[system] added goal {entry.id[:8]}: {entry.title}")
+        return True
+    if action == "done":
+        if len(parts) < 2:
+            print("Usage: /goal done <id>")
+            return True
+        entry = bot.set_goal_status(parts[1], status="done", progress=1.0)
+        if entry is None:
+            print("[system] no matching goal.")
+        else:
+            print(f"[system] marked goal {entry.id[:8]} done.")
+        return True
+    if action == "block":
+        if len(parts) < 2:
+            print("Usage: /goal block <id> [note]")
+            return True
+        note = parts[2] if len(parts) > 2 else ""
+        entry = bot.set_goal_status(parts[1], status="blocked", note=note)
+        if entry is None:
+            print("[system] no matching goal.")
+        else:
+            print(f"[system] marked goal {entry.id[:8]} blocked.")
+        return True
+    if action == "focus":
+        if len(parts) < 2:
+            print("Usage: /goal focus <id>")
+            return True
+        entry = bot.focus_goal(parts[1])
+        if entry is None:
+            print("[system] no matching goal.")
+        else:
+            print(f"[system] focused goal {entry.id[:8]}: {entry.title}")
+        return True
+    if action == "progress":
+        if len(parts) < 3:
+            print("Usage: /goal progress <id> <0..1>")
+            return True
+        try:
+            progress = float(parts[2])
+        except ValueError:
+            print("[system] progress must be a number between 0 and 1.")
+            return True
+        entry = bot.set_goal_status(parts[1], status="active", progress=progress)
+        if entry is None:
+            print("[system] no matching goal.")
+        else:
+            print(f"[system] updated goal {entry.id[:8]} progress to {entry.progress:.2f}.")
+        return True
+    print("Usage: /goal add <text> | /goal done <id> | /goal block <id> [note] | /goal focus <id> | /goal progress <id> <0..1>")
+    return True
+
+
+def _handle_plan_command(arg: str, bot: WonderBot) -> bool:
+    parts = arg.split(maxsplit=4)
+    if not parts or not parts[0]:
+        print("Usage: /plan add <text> | /plan show <id> | /plan focus <id> | /plan done <id> | /plan block <id> [note] | /plan step add <plan_id> <text> | /plan step doing|done|block <plan_id> <step_id> [note] | /plan step depends <plan_id> <step_id> <dep_step_id>")
+        return True
+    action = parts[0].lower()
+    if action == "add":
+        if len(parts) < 2:
+            print("Usage: /plan add <text>")
+            return True
+        entry = bot.add_plan(" ".join(parts[1:]))
+        print(f"[system] added plan {entry.id[:8]}: {entry.title}")
+        return True
+    if action == "show":
+        if len(parts) < 2:
+            print("Usage: /plan show <id>")
+            return True
+        entry = bot.plans.get(parts[1])
+        if entry is None:
+            print("[system] no matching plan.")
+            return True
+        print(f"[{entry.id[:8]}] {entry.title} [{entry.status}] progress={entry.progress:.2f}" + (f" goal={entry.goal_id[:8]}" if entry.goal_id else ""))
+        if entry.detail:
+            print(f"  {entry.detail}")
+        if entry.action_intents:
+            print(f"  intents: {', '.join(entry.action_intents)}")
+        if entry.steps:
+            print("  [steps]")
+            for step in sorted(entry.steps, key=lambda item: item.order):
+                deps = ""
+                if step.dependency_ids:
+                    deps = " deps=" + ",".join(dep[:8] for dep in step.dependency_ids)
+                blocker = f" blocker={step.blocker_note}" if step.blocker_note else ""
+                intent = f" [{step.action_intent}]" if step.action_intent else ""
+                print(f"  - {step.id[:8]} [{step.status}] ({step.progress:.2f}){intent} {step.title}{deps}{blocker}")
+        else:
+            print("  [steps] none yet")
+        return True
+    if action == "focus":
+        if len(parts) < 2:
+            print("Usage: /plan focus <id>")
+            return True
+        entry = bot.focus_plan(parts[1])
+        if entry is None:
+            print("[system] no matching plan.")
+        else:
+            print(f"[system] focused plan {entry.id[:8]}: {entry.title}")
+        return True
+    if action == "done":
+        if len(parts) < 2:
+            print("Usage: /plan done <id>")
+            return True
+        entry = bot.set_plan_status(parts[1], status="done")
+        if entry is None:
+            print("[system] no matching plan.")
+        else:
+            print(f"[system] marked plan {entry.id[:8]} done.")
+        return True
+    if action == "block":
+        if len(parts) < 2:
+            print("Usage: /plan block <id> [note]")
+            return True
+        note = " ".join(parts[2:]) if len(parts) > 2 else ""
+        entry = bot.set_plan_status(parts[1], status="blocked", note=note)
+        if entry is None:
+            print("[system] no matching plan.")
+        else:
+            print(f"[system] marked plan {entry.id[:8]} blocked.")
+        return True
+    if action == "step":
+        if len(parts) < 3:
+            print("Usage: /plan step add <plan_id> <text> | /plan step doing|done|block <plan_id> <step_id> [note] | /plan step depends <plan_id> <step_id> <dep_step_id>")
+            return True
+        subaction = parts[1].lower()
+        if subaction == "add":
+            if len(parts) < 4:
+                print("Usage: /plan step add <plan_id> <text>")
+                return True
+            plan, step = bot.add_plan_step(parts[2], " ".join(parts[3:]))
+            if plan is None or step is None:
+                print("[system] no matching plan.")
+            else:
+                print(f"[system] added step {step.id[:8]} to plan {plan.id[:8]}.")
+            return True
+        if subaction in {"doing", "done", "block"}:
+            if len(parts) < 4:
+                print("Usage: /plan step doing|done|block <plan_id> <step_id> [note]")
+                return True
+            note = parts[4] if len(parts) > 4 else ""
+            status = {"doing": "doing", "done": "done", "block": "blocked"}[subaction]
+            blocker_note = note if status == "blocked" else ""
+            plan, step = bot.set_plan_step_status(parts[2], parts[3], status=status, note=note, blocker_note=blocker_note)
+            if plan is None or step is None:
+                print("[system] no matching plan/step.")
+            else:
+                print(f"[system] updated {plan.id[:8]}/{step.id[:8]} to {step.status}.")
+            return True
+        if subaction == "depends":
+            if len(parts) < 5:
+                print("Usage: /plan step depends <plan_id> <step_id> <dep_step_id>")
+                return True
+            plan, step = bot.add_plan_dependency(parts[2], parts[3], parts[4])
+            if plan is None or step is None:
+                print("[system] no matching plan/step.")
+            else:
+                print(f"[system] added dependency to {plan.id[:8]}/{step.id[:8]}.")
+            return True
+    print("Usage: /plan add <text> | /plan show <id> | /plan focus <id> | /plan done <id> | /plan block <id> [note] | /plan step add <plan_id> <text> | /plan step doing|done|block <plan_id> <step_id> [note] | /plan step depends <plan_id> <step_id> <dep_step_id>")
+    return True
+
+
+def _handle_act_command(arg: str, bot: WonderBot) -> bool:
+    parts = arg.split(maxsplit=1)
+    if not parts or not parts[0]:
+        print("Usage: /act run <tool> [key=value ...] [--commit] | /act step <plan_id> <step_id> [--commit] | /act next [n] [--commit]")
+        return True
+    subaction = parts[0].lower()
+    remainder = parts[1] if len(parts) > 1 else ""
+    if subaction == "run":
+        if not remainder:
+            print("Usage: /act run <tool> [key=value ...] [--commit]")
+            return True
+        raw = remainder.strip()
+        tokens = raw.split()
+        commit = "--commit" in tokens
+        raw = " ".join(token for token in tokens if token != "--commit")
+        tool_name, _, arg_text = raw.partition(" ")
+        args = parse_kv_args(arg_text)
+        if "_" in args and not any(key in args for key in {"text", "query", "note"}):
+            free = " ".join(str(item) for item in args.pop("_"))
+            if tool_name in {"note", "speak", "goal_add", "plan_add"}:
+                args["text"] = free
+            elif tool_name in {"remember", "search_memory"}:
+                args["query"] = free
+        run = bot.run_tool(tool_name, args=args, dry_run=(not commit), source="cli")
+        print(f"[action] {run.summary}")
+        return True
+    if subaction == "step":
+        raw = remainder.strip()
+        tokens = raw.split()
+        commit = "--commit" in tokens
+        bits = [token for token in tokens if token != "--commit"]
+        if len(bits) < 2:
+            print("Usage: /act step <plan_id> <step_id> [--commit]")
+            return True
+        run = bot.run_plan_step(bits[0], bits[1], dry_run=(not commit), source="cli-step")
+        print(f"[action] {run.summary}")
+        return True
+    if subaction == "next":
+        raw = remainder.strip()
+        tokens = raw.split()
+        commit = "--commit" in tokens
+        bits = [token for token in tokens if token != "--commit"]
+        limit = int(bits[0]) if bits and bits[0].isdigit() else 3
+        pairs = bot.plans.executable_steps(limit=limit)
+        if not pairs:
+            print("[system] no executable plan steps yet.")
+            return True
+        if not commit:
+            for plan, step in pairs:
+                tool_name, inferred = bot.actions.resolve_step_tool(plan, step)
+                print(f"- {plan.id[:8]}/{step.id[:8]} -> {tool_name} args={json.dumps(inferred, ensure_ascii=False)}")
+            return True
+        for plan, step in pairs:
+            run = bot.run_plan_step(plan.id, step.id, dry_run=False, source="cli-next")
+            print(f"[action] {plan.id[:8]}/{step.id[:8]} -> {run.summary}")
+        return True
+    print("Usage: /act run <tool> [key=value ...] [--commit] | /act step <plan_id> <step_id> [--commit] | /act next [n] [--commit]")
+    return True
+
+
+def _kind_and_limit(arg: str, default_limit: int = 10) -> tuple[str | None, int]:
+    parts = arg.split()
+    kind = None
+    limit = default_limit
+    if parts:
+        if parts[0].isdigit():
+            limit = int(parts[0])
+        else:
+            kind = parts[0]
+            if len(parts) > 1 and parts[1].isdigit():
+                limit = int(parts[1])
+    return kind, limit
 
 
 def _render_turns(turns: list[AgentTurn]) -> None:

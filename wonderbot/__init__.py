@@ -6,3 +6,5 @@ from .lifecycle import MemoryLifecycle, SleepReport
 from .longterm import LongTermMemoryEntry, LongTermMemoryStore
 from .planner import OutcomeUpdate, PlanEntry, PlanStep, PlanStore
 from .selfmodel import SelfModelEntry, SelfModelStore
+
+from .execution import ActionRegistry, ExecutionRecord, ExecutionStore, ToolSpec

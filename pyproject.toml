@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wonderbot"
-version = "0.9.0"
-description = "Continuous agent base with event-coded memory, live multimodal sensing, replay logs, self-model, durable goals, and phase-9 planning plus execution tracking."
+version = "0.10.0"
+description = "Continuous agent base with event-coded memory, live multimodal sensing, replay logs, self-model, durable goals, and phase-10 controlled tool/action execution."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

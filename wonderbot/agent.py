@@ -13,6 +13,7 @@ from .ganglion import Ganglion
 from .journal import JournalStore
 from .goals import GoalEntry, GoalStore
 from .planner import PlanEntry, PlanStore
+from .execution import ActionRegistry, ExecutionRecord
 from .lifecycle import MemoryLifecycle, SleepReport
 from .llm_backends import create_backend
 from .longterm import LongTermMemoryStore
@@ -119,6 +120,13 @@ class WonderBot:
             path=config.logging.path,
             enabled=config.logging.enabled,
             flush_each_write=config.logging.flush_each_write,
+        )
+        self.actions = ActionRegistry(
+            agent=self,
+            path=config.execution.path,
+            default_dry_run=config.execution.default_dry_run,
+            auto_mark_step_doing=config.execution.auto_mark_step_doing,
+            auto_mark_done_on_success=config.execution.auto_mark_done_on_success,
         )
         self.consolidator = MemoryConsolidator(
             memory=self.memory,
@@ -371,6 +379,12 @@ class WonderBot:
             self.replay.log("plan_step_dependency", {"plan_id": plan.id if plan else plan_id_prefix, "step_id": step.id, "dependency_ids": list(step.dependency_ids)})
         return plan, step
 
+    def run_tool(self, tool_name: str, args: Optional[Dict[str, object]] = None, dry_run: Optional[bool] = None, source: str = "manual") -> ExecutionRecord:
+        return self.actions.execute_tool(tool_name, dict(args or {}), dry_run=dry_run, source=source)
+
+    def run_plan_step(self, plan_id_prefix: str, step_id_prefix: str, dry_run: Optional[bool] = None, source: str = "plan-step") -> ExecutionRecord:
+        return self.actions.execute_plan_step(plan_id_prefix, step_id_prefix, dry_run=dry_run, source=source)
+
     def capture_self_statement(self, kind: str, text: str, source: str = "user", strength: float = 0.76) -> None:
         entry = self.self_model.add_or_reinforce(kind=kind, text=text, source=source, strength=strength, evidence=[text])
         self.replay.log("self_model_write", {"kind": kind, "text": entry.text, "strength": entry.strength})
@@ -382,6 +396,7 @@ class WonderBot:
         self.self_model.save()
         self.goals.save()
         self.plans.save()
+        self.actions.save()
         self.replay.log(
             "save",
             {
@@ -391,6 +406,7 @@ class WonderBot:
                 "self_model_path": self.config.selfmodel.path,
                 "goals_path": self.config.goals.path,
                 "plans_path": self.config.plans.path,
+                "actions_path": self.config.execution.path,
                 "tick": self.ganglion.t,
             },
         )
@@ -417,6 +433,7 @@ class WonderBot:
                 "self_model": self.self_model.status().to_dict(),
                 "goals": self.goals.status().to_dict(),
                 "plans": self.plans.status().to_dict(),
+                "actions": self.actions.status().to_dict(),
                 "consolidation": self.config.consolidation.__dict__ if hasattr(self.config.consolidation, "__dict__") else asdict(self.config.consolidation),
                 "sleep": self.config.sleep.__dict__ if hasattr(self.config.sleep, "__dict__") else asdict(self.config.sleep),
             },
@@ -466,6 +483,11 @@ class WonderBot:
                 ],
             },
             "focus": self.focus_state.to_dict(),
+            "actions": {
+                "status": self.actions.status().to_dict(),
+                "latest": [run.to_dict() for run in self.actions.latest_runs(limit=5)],
+                "tools": [tool.to_dict() for tool in self.actions.list_tools()],
+            },
             "voice": {
                 "enabled": self.voice_enabled,
                 "status": asdict(self.speaker.status()),

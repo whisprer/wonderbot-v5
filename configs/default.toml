@@ -151,6 +151,13 @@ enabled = true
 path = "state/replay.jsonl"
 flush_each_write = true
 
+[execution]
+path = "state/action_runs.json"
+default_dry_run = true
+auto_mark_step_doing = true
+auto_mark_done_on_success = false
+
+
 [tts]
 enabled = false
 rate = 185

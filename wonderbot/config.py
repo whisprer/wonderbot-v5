@@ -192,6 +192,15 @@ class StabilityConfig:
     minimum_response_salience: float = 0.18
 
 
+
+
+@dataclass(slots=True)
+class ExecutionConfig:
+    path: str = 'state/action_runs.json'
+    default_dry_run: bool = True
+    auto_mark_step_doing: bool = True
+    auto_mark_done_on_success: bool = False
+
 @dataclass(slots=True)
 class LoggingConfig:
     enabled: bool = True
@@ -232,6 +241,7 @@ class WonderBotConfig:
     speech: SpeechConfig
     stability: StabilityConfig
     logging: LoggingConfig
+    execution: ExecutionConfig
     tts: TTSConfig
 
     @classmethod
@@ -258,6 +268,7 @@ class WonderBotConfig:
             speech=SpeechConfig(**data.get('speech', {})),
             stability=StabilityConfig(**data.get('stability', {})),
             logging=LoggingConfig(**data.get('logging', {})),
+            execution=ExecutionConfig(**data.get('execution', {})),
             tts=TTSConfig(**data.get('tts', {})),
         )
 

@@ -41,8 +41,7 @@ def main(argv: list[str] | None = None) -> int:
         if not text:
             continue
         header = f"[legacy:{path.relative_to(root)}]"
-        bot.memory.add(f"{header}
-{text}", source="legacy", metadata={"path": str(path.relative_to(root))})
+        bot.memory.add(f"{header}\n{text}", source="legacy", metadata={"path": str(path.relative_to(root))})
         count += 1
 
     bot.save()
