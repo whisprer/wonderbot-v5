@@ -134,9 +134,10 @@ class PlanStore:
             self.focus_plan_id = ""
             return
         data = json.loads(self.path.read_text(encoding="utf-8"))
-        self.focus_plan_id = str(data.get("focus_plan_id", ""))
+        self.focus_plan_id = "" if isinstance(data, list) else str(data.get("focus_plan_id", ""))
+        payloads = data if isinstance(data, list) else data.get("entries", [])
         self.entries = []
-        for payload in data.get("entries", []):
+        for payload in payloads:
             payload = dict(payload)
             payload["steps"] = [step if isinstance(step, PlanStep) else PlanStep(**step) for step in payload.get("steps", [])]
             entry = PlanEntry(**payload)

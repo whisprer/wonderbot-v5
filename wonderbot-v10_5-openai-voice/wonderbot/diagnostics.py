@@ -32,6 +32,8 @@ def collect_runtime_diagnostics(
         'soundfile': _safe_version('soundfile'),
         'pillow': _safe_version('pillow'),
         'pyttsx3': _safe_version('pyttsx3'),
+        'datasets': _safe_version('datasets'),
+        'sentencepiece': _safe_version('sentencepiece'),
         'numpy': _safe_version('numpy'),
     }
     payload = {

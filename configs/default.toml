@@ -2,7 +2,7 @@
 name = "wonderbot"
 response_style = "warm, concise, reflective, technical when useful"
 reaction_threshold = 0.18
-spontaneous_interval = 5
+spontaneous_interval = 200
 max_context_memories = 6
 focus_max_items = 6
 focus_decay_seconds = 180.0
@@ -115,13 +115,13 @@ brightness_threshold = 0.05
 min_salience = 0.12
 
 [microphone]
-enabled = false
-sample_rate = 16000
+enabled = true
+sample_rate = 48000
 channels = 1
-window_seconds = 0.35
-rms_threshold = 0.03
-peak_threshold = 0.12
-min_salience = 0.10
+window_seconds = 1.80
+rms_threshold = 0.006
+peak_threshold = 0.020
+min_salience = 0.030
 
 [caption]
 enabled = false
@@ -132,19 +132,19 @@ salience_threshold = 0.22
 min_chars = 12
 
 [speech]
-enabled = false
+enabled = true
 model = "openai/whisper-tiny.en"
 language = "en"
-salience_threshold = 0.22
-min_chars = 4
-cooldown_seconds = 0.75
+salience_threshold = 0.080
+min_chars = 1
+cooldown_seconds = 0.20
 
 [stability]
-sensor_response_cooldown_seconds = 2.0
+sensor_response_cooldown_seconds = 0.75
 spontaneous_cooldown_seconds = 6.0
 repeated_stimulus_cooldown_seconds = 3.5
-same_source_cooldown_seconds = 1.25
-minimum_response_salience = 0.18
+same_source_cooldown_seconds = 0.35
+minimum_response_salience = 0.08
 
 [logging]
 enabled = true
@@ -160,9 +160,25 @@ auto_mark_done_on_success = false
 
 [tts]
 enabled = false
+engine = "hf"
+fallback_engine = "pyttsx3"
 rate = 185
 volume = 0.9
 voice_contains = ""
+hf_model = "facebook/mms-tts-eng"
+hf_vocoder_model = "microsoft/speecht5_hifigan"
+hf_speaker_embeddings_source = "Matthijs/cmu-arctic-xvectors"
+hf_speaker_id = 7306
+hf_device = "cpu"
+hf_sample_rate = 16000
+openai_model = "gpt-4o-mini-tts"
+openai_voice = "sage"
+openai_response_format = "wav"
+openai_speed = 1.0
+openai_timeout_seconds = 30.0
+openai_api_key_env = "OPENAI_API_KEY"
+openai_base_url = "https://api.openai.com/v1"
+playback_backend = "auto"
 speak_user_responses = true
 speak_sensor_responses = false
 speak_spontaneous = true

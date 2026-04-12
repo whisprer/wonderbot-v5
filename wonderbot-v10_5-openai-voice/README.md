@@ -1,6 +1,6 @@
 # wonderbot-v10.5
 
-A clean consolidation base for the archived LLM/agent experiments, now extended through **phase 10 planning, execution, controlled tool/action runs, and an OpenAI TTS voice upgrade**.
+A clean consolidation base for the archived LLM/agent experiments, now extended through **phase 10 planning, execution, controlled tool/action runs, and a local HF TTS voice upgrade**.
 
 This repo is deliberately **not** another fragile wrapper around a standard tokenizer pretending to be tokenizerless.
 Instead it separates the system into clear layers:
@@ -15,7 +15,7 @@ Instead it separates the system into clear layers:
 8. **Memory lifecycle** — long-term promotion, sleep consolidation, dream/rehearsal synthesis, and decay/archiving.
 9. **Self-model + goals** — durable preferences/constraints/identity, persistent work queue, focused goal anchor, and recall weighted by what the agent is actively trying to do.
 10. **Planning + execution** — multi-step plans, dependencies, blockers, action intents, executable next-step selection, and progress updates driven by reported outcomes.
-11. **Voice upgrade** — OpenAI TTS as the preferred voice path with pyttsx3 fallback when the API key, network path, or playback backend is unavailable.
+11. **Voice upgrade** — local HF TTS as the preferred voice path with pyttsx3 fallback and OpenAI TTS kept optional.
 
 That split is the point: the old projects drifted because the “new tokenizer” was treated as if it could be dropped into a pretrained LM without retraining the representational contract. This base stops doing that.
 
@@ -110,12 +110,13 @@ That split is the point: the old projects drifted because the “new tokenizer�
   - `/act step <plan_id> <step_id> [--commit]`
   - `/act next [n] [--commit]`
 
-## What phase 10.5 adds
+## What phase 10.5.1 adds
 
-- **OpenAI TTS** as the preferred voice backend using `gpt-4o-mini-tts`.
-- Default voice set to **`sage`** with **`wav`** output for easier playback.
-- Existing **pyttsx3** path kept as fallback when the API key, playback backend, or network path is unavailable.
-- Configurable voice settings in `[tts]`, including engine selection, OpenAI model, voice, and playback backend.
+- **Local HF TTS** as the preferred voice backend using `microsoft/speecht5_tts`.
+- Default local speaker embedding set via the CMU Arctic xvector set.
+- Existing **pyttsx3** path kept as fallback when local HF dependencies or model assets are unavailable.
+- **OpenAI TTS** kept available as an optional engine rather than the default.
+- Configurable voice settings in `[tts]`, including HF model selection, optional OpenAI engine settings, and playback backend.
 
 
 ## What this repo does now
@@ -127,7 +128,7 @@ That split is the point: the old projects drifted because the “new tokenizer�
 - Keeps the LLM backend abstract so you can stay lightweight now, plug in HF later, or replace the backend entirely with a future native event-stream model.
 - Supports **optional live camera and microphone sensing**.
 - Supports **optional image captioning and speech transcription enrichment** behind the same sensor contract.
-- Supports **optional voice output** without making voice a hard dependency.
+- Supports **optional local or API-backed voice output** without making voice a hard dependency.
 - Supports **durable journaled consolidation**, so the system can accumulate structured takeaways instead of only raw turns.
 - Supports a **memory lifecycle** where durable knowledge can survive beyond the recent episode stream.
 
@@ -163,8 +164,7 @@ py -3.11 -m wonderbot.cli --live --camera --microphone
 Phase 4/5/6/10.5 live mode with captioning, STT, and upgraded TTS:
 
 ```bash
-py -3.11 -m pip install -e .[live-full,openai-voice,dev]
-$env:OPENAI_API_KEY = "sk-..."
+py -3.11 -m pip install -e .[live-full,hf-voice,voice,dev]
 py -3.11 -m wonderbot.cli --live --camera --microphone --caption --stt --tts --diagnostics
 ```
 

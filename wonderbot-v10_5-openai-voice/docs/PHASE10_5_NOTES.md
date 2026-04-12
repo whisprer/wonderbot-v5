@@ -1,18 +1,21 @@
-# Phase 10.5 — Voice upgrade
+# phase 10.5.1 notes
 
-Preferred voice path: OpenAI TTS (`gpt-4o-mini-tts`) with `sage` as the default voice and `wav` output for easy playback.
+Preferred voice path: local HF TTS with `microsoft/speecht5_tts` as the default model and `pyttsx3` kept as the safety fallback.
 
-Fallback path: existing `pyttsx3` speaker when the API key, network path, or audio playback backend is unavailable.
+This pass keeps OpenAI TTS available as an optional engine, but the default config no longer depends on API credits or network availability.
 
-Environment:
+Included changes:
+- HF TTS speaker path in `wonderbot/tts.py`
+- SpeechT5-specific synthesizer with CMU Arctic xvector speaker embeddings
+- Generic transformers TTS pipeline fallback for alternate HF models
+- diagnostics now report `datasets` and `sentencepiece` availability
+- new optional dependency group: `hf-voice`
 
-- `OPENAI_API_KEY` — required for OpenAI voice output
-- `OPENAI_BASE_URL` — optional override for compatible gateways
+Install for local HF voice:
 
-Recommended run:
-
-```powershell
-py -3.11 -m pip install -e .[live-full,openai-voice,dev]
-$env:OPENAI_API_KEY = "sk-..."
-py -3.11 -m wonderbot.cli --live --microphone --stt --tts --diagnostics
+```bash
+py -3.11 -m pip install -e .[live-full,hf-voice,voice,dev]
+py -3.11 -m wonderbot.cli --live --camera --microphone --caption --stt --tts --diagnostics
 ```
+
+If SpeechT5 setup proves heavier than desired, you can switch to another HF TTS model in `configs/default.toml` under `[tts].hf_model` while keeping the same local voice path.

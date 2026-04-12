@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wonderbot"
-version = "0.10.5"
-description = "Continuous agent base with event-coded memory, live multimodal sensing, replay logs, self-model, durable goals, controlled tool/action execution, and phase-10.5 OpenAI TTS voice upgrades."
+version = "0.10.5.1"
+description = "Continuous agent base with event-coded memory, live multimodal sensing, replay logs, self-model, durable goals, controlled tool/action execution, and phase-10.5.1 HF local TTS voice upgrades with OpenAI kept optional."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -52,6 +52,14 @@ voice = [
 ]
 openai-voice = [
   "pyttsx3>=2.90"
+]
+hf-voice = [
+  "transformers>=4.40.0",
+  "torch>=2.2.0",
+  "soundfile>=0.12.1",
+  "numpy>=1.26.0",
+  "datasets>=2.18.0",
+  "sentencepiece>=0.2.0"
 ]
 dev = [
   "pytest>=8.0.0"

@@ -84,9 +84,10 @@ class GoalStore:
             self.focus_goal_id = ""
             return
         data = json.loads(self.path.read_text(encoding="utf-8"))
-        self.focus_goal_id = str(data.get("focus_goal_id", ""))
+        self.focus_goal_id = "" if isinstance(data, list) else str(data.get("focus_goal_id", ""))
+        payloads = data if isinstance(data, list) else data.get("entries", [])
         self.entries = []
-        for payload in data.get("entries", []):
+        for payload in payloads:
             entry = GoalEntry(**payload)
             if len(entry.vector) != self.codec.dim:
                 entry.vector = self.codec.vectorize(entry.combined_text())

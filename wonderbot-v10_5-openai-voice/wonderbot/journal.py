@@ -47,8 +47,12 @@ class JournalStore:
             self.entries = []
             return
         data = json.loads(self.path.read_text(encoding='utf-8'))
+        if isinstance(data, list):
+            self.last_consolidated_ms = 0
+            self.entries = [JournalEntry(**entry) for entry in data if isinstance(entry, dict)]
+            return
         self.last_consolidated_ms = int(data.get('last_consolidated_ms', 0))
-        self.entries = [JournalEntry(**entry) for entry in data.get('entries', [])]
+        self.entries = [JournalEntry(**entry) for entry in data.get('entries', []) if isinstance(entry, dict)]
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

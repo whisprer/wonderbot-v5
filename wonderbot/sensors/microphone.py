@@ -77,6 +77,24 @@ class SoundDeviceMicrophoneAdapter:
         if salience < self.min_salience:
             return []
 
+        sample = self.record()
+        
+        # mono
+        if sample.ndim > 1:
+            sample = sample[:, 0]
+        
+        # fixed preamp
+        sample = sample * 8.0
+        
+        # RMS-based auto gain
+        rms = float(np.sqrt(np.mean(sample ** 2)) + 1e-8)
+        target_rms = 0.10
+        auto_gain = min(12.0, target_rms / rms)
+        sample = sample * auto_gain
+        
+        # soft limiter / clamp
+        sample = np.tanh(sample)
+
         texture = "voice-like banding" if 0.03 <= zcr <= 0.22 else ("noisy texture" if zcr > 0.22 else "low-frequency texture")
         if peak >= self.peak_threshold * 1.6:
             event = "a sharp transient"

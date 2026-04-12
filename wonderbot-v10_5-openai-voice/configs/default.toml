@@ -160,11 +160,17 @@ auto_mark_done_on_success = false
 
 [tts]
 enabled = false
-engine = "openai"
+engine = "hf"
 fallback_engine = "pyttsx3"
 rate = 185
 volume = 0.9
 voice_contains = ""
+hf_model = "microsoft/speecht5_tts"
+hf_vocoder_model = "microsoft/speecht5_hifigan"
+hf_speaker_embeddings_source = "Matthijs/cmu-arctic-xvectors"
+hf_speaker_id = 7306
+hf_device = "cpu"
+hf_sample_rate = 16000
 openai_model = "gpt-4o-mini-tts"
 openai_voice = "sage"
 openai_response_format = "wav"

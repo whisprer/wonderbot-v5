@@ -5,4 +5,5 @@
 # For voice output: pip install -e .[voice]
 # For everything in one go: pip install -e .[live-full,voice,dev]
 
+# For local HF voice with pyttsx3 fallback: pip install -e .[hf-voice]
 # For OpenAI voice with pyttsx3 fallback: pip install -e .[openai-voice]

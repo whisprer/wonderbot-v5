@@ -211,11 +211,17 @@ class LoggingConfig:
 @dataclass(slots=True)
 class TTSConfig:
     enabled: bool = False
-    engine: str = 'openai'
+    engine: str = 'hf'
     fallback_engine: str = 'pyttsx3'
     rate: int = 185
     volume: float = 0.9
     voice_contains: str = ''
+    hf_model: str = 'microsoft/speecht5_tts'
+    hf_vocoder_model: str = 'microsoft/speecht5_hifigan'
+    hf_speaker_embeddings_source: str = 'Matthijs/cmu-arctic-xvectors'
+    hf_speaker_id: int = 7306
+    hf_device: str = 'cpu'
+    hf_sample_rate: int = 16000
     openai_model: str = 'gpt-4o-mini-tts'
     openai_voice: str = 'sage'
     openai_response_format: str = 'wav'

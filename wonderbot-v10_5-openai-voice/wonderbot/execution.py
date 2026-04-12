@@ -82,7 +82,11 @@ class ExecutionStore:
             self.runs = []
             return
         data = json.loads(self.path.read_text(encoding="utf-8"))
-        self.runs = [payload if isinstance(payload, ExecutionRecord) else ExecutionRecord(**payload) for payload in data.get("runs", [])]
+        if isinstance(data, list):
+            payloads = data
+        else:
+            payloads = data.get("runs", [])
+        self.runs = [payload if isinstance(payload, ExecutionRecord) else ExecutionRecord(**payload) for payload in payloads if isinstance(payload, dict)]
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

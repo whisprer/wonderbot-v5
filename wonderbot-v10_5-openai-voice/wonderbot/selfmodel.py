@@ -72,8 +72,9 @@ class SelfModelStore:
             self.entries = []
             return
         data = json.loads(self.path.read_text(encoding="utf-8"))
+        payloads = data if isinstance(data, list) else data.get("entries", [])
         self.entries = []
-        for payload in data.get("entries", []):
+        for payload in payloads:
             entry = SelfModelEntry(**payload)
             if len(entry.vector) != self.codec.dim:
                 entry.vector = self.codec.vectorize(entry.text)

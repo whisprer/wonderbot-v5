@@ -124,6 +124,58 @@ class Pyttsx3Speaker:
             pass
 
 
+class HFTTSSpeaker:
+    def __init__(
+        self,
+        config: TTSConfig,
+        *,
+        fallback: Speaker | None = None,
+        synthesizer: Callable[[str], tuple[object, int]] | None = None,
+        player: Callable[[Path, str, str], str] | None = None,
+    ) -> None:
+        self._config = config
+        self._fallback = fallback
+        self._synthesizer = synthesizer or _build_hf_synthesizer(config)
+        self._player = player or _play_audio_file
+        self._resolved_backend = _resolve_playback_backend('wav', config.playback_backend)
+        self._status = SpeakerStatus(
+            enabled=True,
+            available=True,
+            detail=f'HF TTS active ({config.hf_model}, playback={self._resolved_backend})',
+            voice_name=_hf_voice_name(config),
+            engine='hf',
+        )
+
+    def say(self, text: str) -> None:
+        text = text.strip()
+        if not text:
+            return
+        try:
+            audio, sample_rate = self._synthesizer(text)
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as handle:
+                temp_path = Path(handle.name)
+            try:
+                _write_audio_file(temp_path, audio, sample_rate)
+                self._player(temp_path, 'wav', self._resolved_backend)
+            finally:
+                try:
+                    temp_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+        except Exception:
+            if self._fallback is not None:
+                self._fallback.say(text)
+                return
+            raise
+
+    def status(self) -> SpeakerStatus:
+        return self._status
+
+    def close(self) -> None:
+        if self._fallback is not None:
+            self._fallback.close()
+
+
 class OpenAITTSSpeaker:
     def __init__(
         self,
@@ -217,6 +269,112 @@ class OpenAITTSSpeaker:
             self._fallback.close()
 
 
+def _hf_voice_name(config: TTSConfig) -> str:
+    if 'speecht5' in config.hf_model.lower():
+        return f'{config.hf_model}#{config.hf_speaker_id}'
+    return config.hf_model
+
+
+def _build_hf_synthesizer(config: TTSConfig) -> Callable[[str], tuple[object, int]]:
+    model_name = (config.hf_model or '').strip() or 'microsoft/speecht5_tts'
+    if 'speecht5' in model_name.lower():
+        return _build_speecht5_synthesizer(config)
+    return _build_transformers_tts_synthesizer(config)
+
+
+
+def _build_transformers_tts_synthesizer(config: TTSConfig) -> Callable[[str], tuple[object, int]]:
+    try:
+        from transformers import pipeline
+    except ImportError as exc:
+        raise TTSUnavailableError('transformers is not installed. Install with: pip install -e .[hf-voice]') from exc
+
+    errors: list[str] = []
+    pipe = None
+    for task in ('text-to-speech', 'text-to-audio'):
+        try:
+            pipe = pipeline(task, model=config.hf_model)
+            break
+        except Exception as exc:  # pragma: no cover - depends on local transformers version
+            errors.append(f'{task}: {exc}')
+    if pipe is None:
+        joined = '; '.join(errors) if errors else 'no supported transformers text-to-speech pipeline found'
+        raise TTSUnavailableError(f'could not build HF TTS pipeline for {config.hf_model}: {joined}')
+
+    def synthesize(text: str) -> tuple[object, int]:
+        result = pipe(text)
+        audio = result.get('audio') if isinstance(result, dict) else result
+        sample_rate = config.hf_sample_rate
+        if isinstance(result, dict):
+            sample_rate = int(result.get('sampling_rate') or result.get('sample_rate') or sample_rate)
+        return audio, sample_rate
+
+    return synthesize
+
+
+
+def _build_speecht5_synthesizer(config: TTSConfig) -> Callable[[str], tuple[object, int]]:
+    try:
+        import torch
+        from datasets import load_dataset
+        from transformers import SpeechT5ForTextToSpeech, SpeechT5HifiGan, SpeechT5Processor
+    except ImportError as exc:
+        raise TTSUnavailableError(
+            'SpeechT5 dependencies are missing. Install with: pip install -e .[hf-voice]'
+        ) from exc
+
+    model_name = config.hf_model or 'microsoft/speecht5_tts'
+    vocoder_name = config.hf_vocoder_model or 'microsoft/speecht5_hifigan'
+    embeddings_source = config.hf_speaker_embeddings_source or 'Matthijs/cmu-arctic-xvectors'
+    try:
+        processor = SpeechT5Processor.from_pretrained(model_name)
+        model = SpeechT5ForTextToSpeech.from_pretrained(model_name)
+        vocoder = SpeechT5HifiGan.from_pretrained(vocoder_name)
+        dataset = load_dataset(embeddings_source, split='validation')
+    except Exception as exc:
+        raise TTSUnavailableError(f'failed to load SpeechT5 assets: {exc}') from exc
+
+    speaker_id = max(0, min(int(config.hf_speaker_id), len(dataset) - 1))
+    speaker_embeddings = torch.tensor(dataset[speaker_id]['xvector']).unsqueeze(0)
+    device = 'cuda' if config.hf_device == 'cuda' and torch.cuda.is_available() else 'cpu'
+    model = model.to(device)
+    vocoder = vocoder.to(device)
+    speaker_embeddings = speaker_embeddings.to(device)
+
+    def synthesize(text: str) -> tuple[object, int]:
+        inputs = processor(text=text, return_tensors='pt')
+        inputs = {key: value.to(device) for key, value in inputs.items()}
+        with torch.no_grad():
+            audio = model.generate_speech(
+                inputs['input_ids'],
+                speaker_embeddings,
+                vocoder=vocoder,
+            )
+        audio = audio.detach().cpu().numpy()
+        return audio, int(config.hf_sample_rate)
+
+    return synthesize
+
+
+
+def _write_audio_file(path: Path, audio: object, sample_rate: int) -> None:
+    try:
+        import numpy as np
+        import soundfile as sf
+    except ImportError as exc:
+        raise TTSUnavailableError('soundfile and numpy are required for HF TTS playback. Install with: pip install -e .[hf-voice]') from exc
+
+    array = audio
+    if hasattr(array, 'detach'):
+        array = array.detach()
+    if hasattr(array, 'cpu'):
+        array = array.cpu()
+    if hasattr(array, 'numpy'):
+        array = array.numpy()
+    array = np.asarray(array, dtype='float32').squeeze()
+    sf.write(str(path), array, int(sample_rate))
+
+
 
 def _resolve_playback_backend(fmt: str, backend: str) -> str:
     choice = (backend or 'auto').strip().lower()
@@ -234,7 +392,7 @@ def _resolve_playback_backend(fmt: str, backend: str) -> str:
         if candidate in {'afplay', 'aplay', 'pw-play'} and shutil.which(candidate):
             return candidate
     raise TTSUnavailableError(
-        'no audio playback backend is available for OpenAI TTS; use wav on Windows, install sounddevice+soundfile, or rely on pyttsx3 fallback'
+        'no audio playback backend is available for TTS; use wav on Windows, install sounddevice+soundfile, or rely on pyttsx3 fallback'
     )
 
 
@@ -271,13 +429,24 @@ def _try_build_pyttsx3(config: TTSConfig) -> Speaker | None:
 def build_speaker(config: TTSConfig) -> Speaker:
     if not config.enabled:
         return NullSpeaker(enabled=False, detail='voice output disabled in config')
-    engine = (config.engine or 'openai').strip().lower()
+    engine = (config.engine or 'hf').strip().lower()
     fallback_engine = (config.fallback_engine or '').strip().lower()
 
     fallback: Speaker | None = None
     if fallback_engine == 'pyttsx3' and engine != 'pyttsx3':
         fallback = _try_build_pyttsx3(config)
 
+    if engine in {'hf', 'hf_tts', 'huggingface'}:
+        try:
+            return HFTTSSpeaker(config, fallback=fallback)
+        except TTSUnavailableError as exc:
+            if fallback is not None:
+                return DelegatingSpeaker(
+                    fallback,
+                    detail=f'{fallback.status().detail}; preferred HF voice unavailable: {exc}',
+                    engine='pyttsx3-fallback',
+                )
+            return NullSpeaker(enabled=True, detail=f'voice output unavailable: {exc}')
     if engine in {'openai', 'openai_tts'}:
         try:
             return OpenAITTSSpeaker(config, fallback=fallback)

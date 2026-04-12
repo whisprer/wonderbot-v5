@@ -87,9 +87,15 @@ class LongTermMemoryStore:
             self.last_dream_ms = 0
             return
         data = json.loads(self.path.read_text(encoding="utf-8"))
-        self.last_sleep_ms = int(data.get("last_sleep_ms", 0))
-        self.last_dream_ms = int(data.get("last_dream_ms", 0))
-        self.entries = [LongTermMemoryEntry(**entry) for entry in data.get("entries", [])]
+        if isinstance(data, list):
+            self.last_sleep_ms = 0
+            self.last_dream_ms = 0
+            payloads = data
+        else:
+            self.last_sleep_ms = int(data.get("last_sleep_ms", 0))
+            self.last_dream_ms = int(data.get("last_dream_ms", 0))
+            payloads = data.get("entries", [])
+        self.entries = [LongTermMemoryEntry(**entry) for entry in payloads if isinstance(entry, dict)]
         for entry in self.entries:
             if len(entry.vector) != self.codec.dim:
                 entry.vector = self.codec.vectorize(entry.text)
