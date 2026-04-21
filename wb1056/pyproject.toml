@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wonderbot"
+version = "0.10.5.6"
+description = "Continuous agent base with event-coded memory, live multimodal sensing, replay logs, self-model, durable goals, controlled tool/action execution, and phase-10.5.6 frontend VAD + rolling-buffer STT repair: torchaudio-backed voice activity gating, English-only Whisper fix, local resampling, and clearer live speech debug, with HF local TTS default on MMS/VITS and OpenAI kept optional."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "OpenAI for wofl" }]
+dependencies = []
+
+[project.optional-dependencies]
+hf = [
+  "transformers>=4.40.0",
+  "torch>=2.2.0",
+  "torchaudio>=2.2.0"
+]
+vision = [
+  "opencv-python>=4.10.0",
+  "numpy>=1.26.0"
+]
+audio = [
+  "sounddevice>=0.4.7",
+  "soundfile>=0.12.1",
+  "numpy>=1.26.0"
+]
+multimodal = [
+  "transformers>=4.40.0",
+  "torch>=2.2.0",
+  "torchaudio>=2.2.0",
+  "pillow>=10.0.0",
+  "numpy>=1.26.0"
+]
+live = [
+  "opencv-python>=4.10.0",
+  "sounddevice>=0.4.7",
+  "soundfile>=0.12.1",
+  "numpy>=1.26.0"
+]
+live-full = [
+  "opencv-python>=4.10.0",
+  "sounddevice>=0.4.7",
+  "soundfile>=0.12.1",
+  "numpy>=1.26.0",
+  "transformers>=4.40.0",
+  "torch>=2.2.0",
+  "pillow>=10.0.0"
+]
+voice = [
+  "pyttsx3>=2.90"
+]
+openai-voice = [
+  "pyttsx3>=2.90"
+]
+hf-voice = [
+  "transformers>=4.40.0",
+  "torch>=2.2.0",
+  "torchaudio>=2.2.0",
+  "soundfile>=0.12.1",
+  "numpy>=1.26.0",
+  "datasets>=2.18.0",
+  "sentencepiece>=0.2.0"
+]
+dev = [
+  "pytest>=8.0.0"
+]
+
+[project.scripts]
+wonderbot = "wonderbot.cli:main"
+seed-legacy = "scripts.seed_from_legacy:main"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["wonderbot*", "scripts*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
